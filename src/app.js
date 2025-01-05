@@ -14,6 +14,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('src/public'));
 
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/login.html');
+});
+
 // Routes
 app.use('/api/pets', authRoutes.authenticateToken, petRoutes);
 app.use('/api/assistant', assistantRoutes);
@@ -21,4 +25,4 @@ app.use('/api/auth', authRoutes.router);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
-}); 
+});
