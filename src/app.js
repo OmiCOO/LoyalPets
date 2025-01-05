@@ -6,13 +6,14 @@ const cors = require('cors');
 const petRoutes = require('./routes/petRoutes');
 const assistantRoutes = require('./routes/assistantRoutes');
 const authRoutes = require('./routes/authRoutes');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('src/public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/login.html');
