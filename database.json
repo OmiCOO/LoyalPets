@@ -1,0 +1,13 @@
+{
+  "sql-file": true,
+  "connectionString": {
+    "ENV": "DATABASE_URL"
+  },
+  "ssl": {
+    "ENV": "NODE_ENV",
+    "production": {
+      "rejectUnauthorized": false
+    },
+    "development": false
+  }
+}
