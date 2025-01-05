@@ -1,68 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pet Health Tracker</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
     <div class="container">
-        <h1>Pet Health Information</h1>
-        <form id="petForm">
-            <div class="form-group">
-                <label for="name">Pet Name:</label>
-                <input type="text" id="name" required>
-            </div>
-            <div class="form-group">
-                <label for="petType">Pet Type:</label>
-                <select id="petType" required>
-                    <option value="">Select type</option>
-                    <option value="dog">Dog</option>
-                    <option value="cat">Cat</option>
-                    <option value="bird">Bird</option>
-                    <option value="other">Other</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="breed">Breed:</label>
-                <input type="text" id="breed" required>
-            </div>
-            <div class="form-group">
-                <label for="age">Age:</label>
-                <input type="number" id="age" required>
-            </div>
-            <div class="form-group">
-                <label for="disease">Disease:</label>
-                <input type="text" id="disease" required>
-            </div>
-            <div class="form-group">
-                <label for="symptoms">Symptoms (comma-separated):</label>
-                <textarea id="symptoms" required></textarea>
-            </div>
-            <button type="submit">Submit</button>
-        </form>
-
-        <div id="petList">
-            <h2>Recorded Pets</h2>
-            <div id="pets"></div>
+      <h1>Pet Health Information</h1>
+      <form id="petForm">
+        <div class="form-group">
+          <label for="name">Pet Name:</label>
+          <input type="text" id="name" required />
         </div>
-
-        <div id="chatInterface" class="chat-interface hidden">
-            <div class="chat-header">
-                <h3>Pet Health Assistant</h3>
-                <button id="closeChatBtn">×</button>
-            </div>
-            <div id="chatMessages" class="chat-messages"></div>
-            <div class="chat-input">
-                <div class="input-container">
-                    <textarea id="userMessage" placeholder="Type your message..."></textarea>
-                    <button id="sendMessage">Send</button>
-                </div>
-            </div>
+        <div class="form-group">
+          <label for="petType">Pet Type:</label>
+          <select id="petType" required>
+            <option value="">Select type</option>
+            <option value="dog">Dog</option>
+            <option value="cat">Cat</option>
+            <option value="bird">Bird</option>
+            <option value="other">Other</option>
+          </select>
         </div>
+        <div class="form-group">
+          <label for="breed">Breed:</label>
+          <input type="text" id="breed" required />
+        </div>
+        <div class="form-group">
+          <label for="age">Age:</label>
+          <input type="number" id="age" required />
+        </div>
+        <div class="form-group">
+          <label for="disease">Disease:</label>
+          <input type="text" id="disease" required />
+        </div>
+        <div class="form-group">
+          <label for="symptoms">Symptoms (comma-separated):</label>
+          <textarea id="symptoms" required></textarea>
+        </div>
+        <button type="submit">Submit</button>
+      </form>
+
+      <div id="petList">
+        <h2>Recorded Pets</h2>
+        <div id="pets"></div>
+      </div>
+
+      <div id="chatInterface" class="chat-interface hidden">
+        <div class="chat-header">
+          <h3>Pet Health Assistant</h3>
+          <button id="closeChatBtn">×</button>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input">
+          <div class="input-container">
+            <textarea
+              id="userMessage"
+              placeholder="Type your message..."
+            ></textarea>
+            <button id="sendMessage">Send</button>
+          </div>
+        </div>
+      </div>
     </div>
     <button onclick="logout()" class="logout-btn">Logout</button>
-    <script src="script.js"></script>
-</body>
-</html> 
+    <script src="/script.js"></script>
+  </body>
+</html>

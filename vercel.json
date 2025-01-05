@@ -4,12 +4,44 @@
     {
       "src": "src/app.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "src/public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/(.*)",
       "dest": "src/app.js"
+    },
+    {
+      "src": "/styles.css",
+      "dest": "/src/public/styles.css"
+    },
+    {
+      "src": "/auth.js",
+      "dest": "/src/public/auth.js"
+    },
+    {
+      "src": "/script.js",
+      "dest": "/src/public/script.js"
+    },
+    {
+      "src": "/signup",
+      "dest": "/src/public/signup.html"
+    },
+    {
+      "src": "/login",
+      "dest": "/src/public/login.html"
+    },
+    {
+      "src": "/",
+      "dest": "/src/public/login.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/src/public/$1"
     }
   ]
 }
