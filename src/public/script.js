@@ -90,6 +90,9 @@ window.onload = () => {
 
 let currentThreadId = null;
 let currentPetInfo = null;
+let currentRating = 0;
+let messageCount = 0;
+const MESSAGE_THRESHOLD = 5; // Show feedback form after 5 messages
 
 // Add click event to pet cards
 function addPetCardListeners() {
@@ -227,10 +230,15 @@ loadPets().then(() => {
 
 // Chat interface event listeners
 document.getElementById('closeChatBtn').addEventListener('click', () => {
-  document.getElementById('chatInterface').classList.add('hidden');
-  document.getElementById('chatMessages').innerHTML = '';
-  currentThreadId = null;
-  currentPetInfo = null;
+  console.log('Chat close button clicked');
+  showFeedbackForm();
+  
+  // Only hide chat interface after feedback is submitted
+  document.getElementById('submitFeedback').addEventListener('click', () => {
+    document.getElementById('chatInterface').classList.add('hidden');
+    document.getElementById('feedbackForm').classList.add('hidden');
+    messageCount = 0;
+  }, { once: true });
 });
 
 document.getElementById('sendMessage').addEventListener('click', async () => {
@@ -292,6 +300,14 @@ document.getElementById('sendMessage').addEventListener('click', async () => {
         `;
 
     chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    messageCount++;
+    console.log('Message count:', messageCount);
+    
+    if (messageCount >= MESSAGE_THRESHOLD) {
+      console.log('Showing feedback form after threshold');
+      showFeedbackForm();
+    }
   } catch (error) {
     console.error('Error:', error);
     // Remove loading message
@@ -392,6 +408,14 @@ async function sendMessage(message) {
 
     const data = await response.json();
     addMessageToChat(data.response, 'assistant', data.source);
+
+    messageCount++;
+    console.log('Message count:', messageCount);
+    
+    if (messageCount >= MESSAGE_THRESHOLD) {
+      console.log('Showing feedback form after threshold');
+      showFeedbackForm();
+    }
   } catch (error) {
     console.error('Error:', error);
   }
@@ -502,4 +526,73 @@ async function saveThreadId(petId, threadId) {
     console.error('Error in saveThreadId:', error);
     throw error;
   }
+}
+
+document.querySelectorAll('.star').forEach(star => {
+  star.addEventListener('mouseover', (e) => {
+    const rating = e.target.dataset.rating;
+    highlightStars(rating);
+  });
+
+  star.addEventListener('mouseout', () => {
+    highlightStars(currentRating);
+  });
+
+  star.addEventListener('click', (e) => {
+    currentRating = e.target.dataset.rating;
+    highlightStars(currentRating);
+  });
+});
+
+function highlightStars(rating) {
+  document.querySelectorAll('.star').forEach(star => {
+    star.classList.toggle('active', star.dataset.rating <= rating);
+  });
+}
+
+document.getElementById('submitFeedback').addEventListener('click', async () => {
+  if (!currentRating) {
+    alert('Please select a rating');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({
+        pet_id: currentPetInfo.id,
+        thread_id: currentThreadId,
+        rating: currentRating,
+        comment: document.getElementById('feedbackComment').value
+      }),
+    });
+
+    if (!response.ok) throw new Error('Failed to submit feedback');
+
+    document.getElementById('feedbackForm').classList.add('hidden');
+    alert('Thank you for your feedback!');
+    
+    // Reset form
+    currentRating = 0;
+    highlightStars(0);
+    document.getElementById('feedbackComment').value = '';
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    alert('Failed to submit feedback');
+  }
+});
+
+// Add this function to handle showing the feedback form
+function showFeedbackForm() {
+    const feedbackForm = document.getElementById('feedbackForm');
+    if (feedbackForm) {
+        feedbackForm.classList.remove('hidden');
+        console.log('Feedback form displayed');
+    } else {
+        console.error('Feedback form element not found');
+    }
 }

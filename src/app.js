@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const petRoutes = require('./routes/petRoutes');
 const assistantRoutes = require('./routes/assistantRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
 const authRoutes = require('./routes/authRoutes');
 const path = require('path');
 
@@ -23,6 +24,7 @@ app.get('/', (req, res) => {
 app.use('/api/pets', authRoutes.authenticateToken, petRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/auth', authRoutes.router);
+app.use('/api/feedback', feedbackRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
