@@ -64,6 +64,19 @@
           </div>
         </div>
       </div>
+
+      <div id="feedbackForm" class="feedback-form hidden">
+        <h4>How helpful was this conversation?</h4>
+        <div class="star-rating">
+          <span class="star" data-rating="1">★</span>
+          <span class="star" data-rating="2">★</span>
+          <span class="star" data-rating="3">★</span>
+          <span class="star" data-rating="4">★</span>
+          <span class="star" data-rating="5">★</span>
+        </div>
+        <textarea id="feedbackComment" placeholder="Additional comments (optional)"></textarea>
+        <button id="submitFeedback">Submit Feedback</button>
+      </div>
     </div>
     <button onclick="logout()" class="logout-btn">Logout</button>
     <script src="/script.js"></script>

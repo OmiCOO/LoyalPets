@@ -245,3 +245,79 @@ button:hover {
     border-radius: 4px;
     cursor: pointer;
 }
+
+.feedback-form {
+    padding: 15px;
+    background: #f5f5f5;
+    border-top: 1px solid #ddd;
+}
+
+.feedback-form.hidden {
+    display: none;
+}
+
+.star-rating {
+    font-size: 24px;
+    color: #ddd;
+    margin: 10px 0;
+}
+
+.star {
+    cursor: pointer;
+}
+
+.star.active {
+    color: #ffd700;
+}
+
+#feedbackComment {
+    width: 100%;
+    margin: 10px 0;
+    padding: 8px;
+    height: 60px;
+    resize: vertical;
+}
+
+.message-tags {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.tag-category {
+    margin-bottom: 15px;
+}
+
+.tag-category h4 {
+    margin: 0 0 5px 0;
+    color: #333;
+}
+
+.tag-select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-top: 5px;
+}
+
+.save-tags-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.save-tags-btn:hover {
+    background: #0056b3;
+}
+
+/* Style for multiple select */
+select[multiple] {
+    height: auto;
+    min-height: 80px;
+}
