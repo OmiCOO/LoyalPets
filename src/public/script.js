@@ -83,9 +83,10 @@ async function loadPets() {
   }
 }
 
-window.onload = () => {
+window.onload = async () => {
   if (!checkAuth()) return;
-  loadPets();
+  await loadPets();
+  await checkAdminStatus();
 };
 
 let currentThreadId = null;
@@ -595,4 +596,20 @@ function showFeedbackForm() {
     } else {
         console.error('Feedback form element not found');
     }
+}
+
+async function checkAdminStatus() {
+  try {
+    const response = await fetch('/api/admin/stats', {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    
+    if (response.ok) {
+      document.getElementById('adminNav').style.display = 'block';
+    }
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+  }
 }

@@ -8,6 +8,7 @@ const assistantRoutes = require('./routes/assistantRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const authRoutes = require('./routes/authRoutes');
 const path = require('path');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +26,7 @@ app.use('/api/pets', authRoutes.authenticateToken, petRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/auth', authRoutes.router);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/admin', authRoutes.authenticateToken, adminRoutes.router);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
