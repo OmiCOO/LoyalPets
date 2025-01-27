@@ -4,7 +4,7 @@ const OpenAI = require('openai');
 const { tavily } = require('@tavily/core');
 const pool = require('../config/database');
 
-// Add this array of uncertainty indicators
+// Update the uncertainty indicators to include location-based queries
 const uncertaintyIndicators = [
   "I'm not sure",
   "I don't know",
@@ -23,6 +23,20 @@ const uncertaintyIndicators = [
   'find a qualified',
   'contact a local',
   'directories provided by',
+  'find a veterinarian',
+  'looking for a vet',
+  'veterinarians in',
+  'vets in',
+  'veterinary clinics',
+  'animal hospitals',
+  'find a vet',
+  'vet near',
+  'veterinarian near',
+  'recommend a vet',
+  'looking for veterinary',
+  'need a veterinarian',
+  'veterinary care in',
+  'vet clinics in',
 ];
 
 const openai = new OpenAI({
@@ -88,9 +102,11 @@ async function initializeAssistant() {
     console.log('Creating assistant...');
     assistant = await openai.beta.assistants.create({
       name: 'Pet Health Assistant',
-      instructions: `You are a pet health assistant. Your role is to provide helpful advice about pet health care. 
-                          When responding, consider the pet's information that will be provided in each conversation.
-                          Always be clear, professional, and focused on pet health-related matters.`,
+      instructions: `You are a friendly and caring pet health assistant. Your role is to provide helpful advice about pet health care 
+                    in a warm and empathetic manner. When responding, consider the pet's information and use their name frequently 
+                    to make the conversation more personal. Be encouraging and supportive while maintaining professionalism.
+                    Use a conversational tone and break down complex medical information into easy-to-understand language.
+                    Always be clear, professional, and focused on pet health-related matters.`,
       model: 'gpt-3.5-turbo',
     });
 
@@ -226,15 +242,20 @@ router.post('/thread', async (req, res) => {
   }
 });
 
-// Add this function to perform Tavily search
+// Update the searchTavily function to handle location-based queries
 async function searchTavily(query, petInfo) {
   try {
     console.log('Starting Tavily search with client:', !!tvly);
 
-    const response = await tvly.search(query, {
+    // Determine if this is a location-based veterinary query
+    const isLocationQuery = query.toLowerCase().includes('veterinarian') || 
+                          query.toLowerCase().includes('vet') ||
+                          query.toLowerCase().includes('animal hospital');
+
+    const searchConfig = {
       search_depth: 'advanced',
       include_answer: true,
-      max_results: 5, // Increased to get more results after filtering
+      max_results: 5,
       exclude_domains: [
         'quora.com',
         'facebook.com',
@@ -243,7 +264,20 @@ async function searchTavily(query, petInfo) {
         'instagram.com',
         'tiktok.com',
       ],
-      include_domains: [
+    };
+
+    // Adjust search configuration for location-based queries
+    if (isLocationQuery) {
+      searchConfig.include_domains = [
+        'aaha.org',
+        'avma.org',
+        'yelp.com',
+        'healthypets.com',
+        'veterinarians.com',
+        'vcahospitals.com',
+      ];
+    } else {
+      searchConfig.include_domains = [
         'petmd.com',
         'vcahospitals.com',
         'merckvetmanual.com',
@@ -251,8 +285,10 @@ async function searchTavily(query, petInfo) {
         'avma.org',
         'vet.cornell.edu',
         'vetmed.ucdavis.edu',
-      ],
-    });
+      ];
+    }
+
+    const response = await tvly.search(query, searchConfig);
 
     console.log('Raw Tavily response:', response);
 
@@ -260,15 +296,22 @@ async function searchTavily(query, petInfo) {
       return [];
     }
 
-    // Process results through OpenAI to extract relevant information
-    const context = `Given the following search results about ${petInfo.type} health, 
-                        specifically regarding ${petInfo.disease} with symptoms: ${petInfo.symptoms}, 
-                        please extract and summarize the most relevant medical information. 
-                        Focus on treatment options, care instructions, and important medical facts.
-                        Exclude any general or non-medical content.`;
+    // Modify the context for location-based queries
+    const context = isLocationQuery
+      ? `Given the following search results about veterinary services, please extract and summarize 
+         the most relevant information about veterinary clinics and services. Focus on providing 
+         practical information about finding and choosing veterinary care. Format the clinic names 
+         and contact information in a clear, organized way. Include any relevant websites or contact 
+         details as markdown links.`
+      : `Given the following search results about ${petInfo.type} health, 
+         specifically regarding ${petInfo.disease} with symptoms: ${petInfo.symptoms}, 
+         please extract and summarize the most relevant medical information. 
+         Focus on treatment options, care instructions, and important medical facts.
+         Format any references as markdown links.
+         Exclude any general or non-medical content.`;
 
     const searchContent = response.results
-      .map((r) => `Source: ${r.title}\n${r.content}`)
+      .map((r) => `Source: [${r.title}](${r.url})\n${r.content}`)
       .join('\n\n');
 
     const messages = [
@@ -284,15 +327,16 @@ async function searchTavily(query, petInfo) {
 
     const processedContent = completion.choices[0].message.content;
 
-    // Return processed results
+    // Return processed results with formatted links
     return [
       {
         title: 'Veterinary Information Summary',
         content: processedContent,
-        url: response.results[0].url, // Keep primary source for reference
+        url: response.results[0].url,
         sources: response.results.map((r) => ({
           title: r.title,
           url: r.url,
+          formattedLink: `[${r.title}](${r.url})`
         })),
       },
     ];
@@ -416,11 +460,11 @@ router.post('/message', async (req, res) => {
       const searchResults = await searchTavily(message, petInfo);
 
       if (searchResults && searchResults.length > 0) {
-        const result = searchResults[0]; // We now only have one processed result
-        finalResponse =
+        const result = searchResults[0];
+        finalResponse = 
           `Based on veterinary sources, here's what I found:\n\n${result.content}\n\n` +
-          `Sources consulted:\n${result.sources
-            .map((source) => `• ${source.title}\n  ${source.url}`)
+          `Helpful resources:\n${result.sources
+            .map((source) => source.formattedLink)
             .join('\n')}`;
         source = 'tavily';
       }
