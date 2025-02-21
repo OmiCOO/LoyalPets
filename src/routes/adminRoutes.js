@@ -124,4 +124,57 @@ router.get('/disease-by-pet-type', isAdmin, async (req, res) => {
   }
 });
 
-module.exports = { router, isAdmin }; 
+// Get engagement metrics
+router.get('/engagement-metrics', isAdmin, async (req, res) => {
+  try {
+    const metrics = await pool.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM chat_sessions WHERE start_time >= NOW() - INTERVAL '1 day') as daily_conversations,
+        (SELECT COUNT(*) FROM chat_sessions WHERE start_time >= NOW() - INTERVAL '1 week') as weekly_conversations,
+        (SELECT COUNT(*) FROM chat_sessions WHERE start_time >= NOW() - INTERVAL '1 month') as monthly_conversations,
+        (SELECT COUNT(DISTINCT user_id) FROM chat_sessions WHERE start_time >= NOW() - INTERVAL '1 month') as monthly_active_users,
+        (SELECT ROUND(AVG(messages_count), 2) FROM chat_sessions) as avg_messages_per_session,
+        (SELECT ROUND(AVG(EXTRACT(EPOCH FROM (end_time - start_time))/60), 2) 
+         FROM chat_sessions 
+         WHERE end_time IS NOT NULL) as avg_session_duration_minutes
+    `);
+
+    const deviceMetrics = await pool.query(`
+      SELECT device_type, COUNT(*) as count
+      FROM chat_sessions
+      GROUP BY device_type
+      ORDER BY count DESC
+    `);
+
+    const topTopics = await pool.query(`
+      SELECT topic, COUNT(*) as count
+      FROM chat_topics
+      GROUP BY topic
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    const responseMetrics = await pool.query(`
+      SELECT 
+        ROUND(AVG(EXTRACT(EPOCH FROM response_time)), 2) as avg_response_time,
+        COUNT(*) FILTER (WHERE NOT is_understood) as misunderstood_queries,
+        COUNT(*) as total_queries
+      FROM chat_messages
+      WHERE role = 'assistant'
+    `);
+
+    res.json({
+      engagement: metrics.rows[0],
+      devices: deviceMetrics.rows,
+      topics: topTopics.rows,
+      response: responseMetrics.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+module.exports = {
+  router,
+  isAdmin
+}; 

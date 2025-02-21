@@ -377,3 +377,97 @@ select[multiple] {
     grid-column: 1 / -1;
     height: 400px;
 }
+
+/* Add these styles for metrics display */
+.metrics-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.metric-card {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.metric-card h4 {
+  margin: 0 0 0.5rem 0;
+  color: #666;
+}
+
+.metric-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.metric-label {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.message-feedback {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  
+  .feedback-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+  
+  .feedback-btn:hover {
+    opacity: 1;
+  }
+  
+  .feedback-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  
+  .improvement-question {
+    background: #f5f5f5;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 8px;
+  }
+  
+  .improvement-question textarea {
+    width: 100%;
+    min-height: 80px;
+    margin: 10px 0;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  
+  .improvement-question .button-group {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .improvement-question button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .improvement-question button:first-child {
+    background: #4CAF50;
+    color: white;
+  }
+  
+  .improvement-question button:last-child {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+  }

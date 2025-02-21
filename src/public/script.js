@@ -95,6 +95,12 @@ let currentRating = 0;
 let messageCount = 0;
 const MESSAGE_THRESHOLD = 5; // Show feedback form after 5 messages
 
+// Add these variables at the top
+let currentSessionId = null;
+let sessionStartTime = null;
+
+let feedbackCount = 0;
+
 // Add click event to pet cards
 function addPetCardListeners() {
   document.querySelectorAll('.pet-card').forEach((card) => {
@@ -378,9 +384,17 @@ function addMessageToChat(message, role, source) {
   if (role === 'assistant') {
     const sourceIndicator = document.createElement('span');
     sourceIndicator.className = `source-indicator ${source}`;
-    sourceIndicator.textContent =
-      source === 'tavily' ? '🔍 Tavily Search' : '🤖 AI Assistant';
+    sourceIndicator.textContent = source === 'tavily' ? '🔍 Tavily Search' : '🤖 AI Assistant';
     messageDiv.appendChild(sourceIndicator);
+
+    // Add feedback buttons for assistant messages
+    const feedbackDiv = document.createElement('div');
+    feedbackDiv.className = 'message-feedback';
+    feedbackDiv.innerHTML = `
+      <button class="feedback-btn thumbs-up" onclick="handleFeedback(this, true)">👍</button>
+      <button class="feedback-btn thumbs-down" onclick="handleFeedback(this, false)">👎</button>
+    `;
+    messageDiv.appendChild(feedbackDiv);
   }
 
   const contentDiv = document.createElement('div');
@@ -398,23 +412,31 @@ async function sendMessage(message) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Session-Id': currentSessionId
       },
       body: JSON.stringify({
         threadId: currentThreadId,
         message: message,
-        petInfo: currentPetInfo,
+        petInfo: {
+          ...currentPetInfo,
+          userId: localStorage.getItem('userId')
+        }
       }),
     });
 
     const data = await response.json();
+    
+    // Store session ID if this is the first message
+    if (!currentSessionId && data.sessionId) {
+      currentSessionId = data.sessionId;
+    }
+
     addMessageToChat(data.response, 'assistant', data.source);
 
     messageCount++;
-    console.log('Message count:', messageCount);
     
     if (messageCount >= MESSAGE_THRESHOLD) {
-      console.log('Showing feedback form after threshold');
       showFeedbackForm();
     }
   } catch (error) {
@@ -612,4 +634,147 @@ async function checkAdminStatus() {
   } catch (error) {
     console.error('Error checking admin status:', error);
   }
+}
+
+// Modify the existing chat initialization
+async function initializeChat(petId) {
+  try {
+    // ... existing initialization code ...
+    
+    // Create a new chat session
+    currentSessionId = await createChatSession(
+      localStorage.getItem('userId'),
+      navigator.userAgent
+    );
+    
+    // Add event listener for page unload
+    window.addEventListener('beforeunload', (event) => {
+      // Send a synchronous request to end the session
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/assistant/end-session', false); // false makes it synchronous
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', `Bearer ${localStorage.getItem('token')}`);
+      xhr.send(JSON.stringify({ sessionId: currentSessionId }));
+      
+      currentSessionId = null;
+      sessionStartTime = null;
+    });
+
+  } catch (error) {
+    console.error('Error initializing chat:', error);
+  }
+}
+
+// Add function to end chat session
+async function endChatSession() {
+  if (!currentSessionId) return;
+
+  try {
+    await fetch('/api/assistant/end-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        sessionId: currentSessionId
+      })
+    });
+
+    currentSessionId = null;
+    sessionStartTime = null;
+  } catch (error) {
+    console.error('Error ending chat session:', error);
+  }
+}
+
+// Modify the closeChatInterface function
+function closeChatInterface() {
+  if (currentSessionId) {
+    endChatSession().then(() => {
+      document.getElementById('chatInterface').classList.add('hidden');
+      currentSessionId = null;
+      sessionStartTime = null;
+    });
+  } else {
+    document.getElementById('chatInterface').classList.add('hidden');
+  }
+}
+
+async function handleFeedback(button, isPositive) {
+  const messageDiv = button.closest('.message');
+  const content = messageDiv.querySelector('.message-content').textContent;
+  
+  try {
+    const response = await fetch('/api/feedback/quick', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        pet_id: currentPetInfo.id,
+        thread_id: currentThreadId,
+        message: content,
+        is_positive: isPositive,
+        session_id: currentSessionId
+      })
+    });
+
+    if (response.ok) {
+      // Disable both buttons after feedback
+      const buttons = messageDiv.querySelectorAll('.feedback-btn');
+      buttons.forEach(btn => btn.disabled = true);
+      
+      // Increment feedback count and check if we should show the improvement question
+      feedbackCount++;
+      if (feedbackCount % 3 === 0) {
+        showImprovementQuestion();
+      }
+    }
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+  }
+}
+
+function showImprovementQuestion() {
+  const questionDiv = document.createElement('div');
+  questionDiv.className = 'improvement-question';
+  questionDiv.innerHTML = `
+    <h4>Tell us more about how we can improve!</h4>
+    <textarea placeholder="Your suggestions help us get better..."></textarea>
+    <div class="button-group">
+      <button onclick="submitImprovement(this)">Submit</button>
+      <button onclick="skipImprovement(this)">Skip</button>
+    </div>
+  `;
+  
+  document.getElementById('chatMessages').appendChild(questionDiv);
+}
+
+async function submitImprovement(button) {
+  const questionDiv = button.closest('.improvement-question');
+  const feedback = questionDiv.querySelector('textarea').value;
+  
+  try {
+    await fetch('/api/feedback/improvement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        feedback,
+        session_id: currentSessionId
+      })
+    });
+    
+    questionDiv.remove();
+  } catch (error) {
+    console.error('Error submitting improvement feedback:', error);
+  }
+}
+
+function skipImprovement(button) {
+  button.closest('.improvement-question').remove();
 }

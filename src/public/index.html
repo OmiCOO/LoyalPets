@@ -66,6 +66,17 @@
             <button id="sendMessage">Send</button>
           </div>
         </div>
+        
+        <div id="improvementTemplate" class="hidden">
+          <div class="improvement-question">
+            <h4>Tell us more about how we can improve!</h4>
+            <textarea placeholder="Your suggestions help us get better..."></textarea>
+            <div class="button-group">
+              <button onclick="submitImprovement(this)">Submit</button>
+              <button onclick="skipImprovement(this)">Skip</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="feedbackForm" class="feedback-form hidden">

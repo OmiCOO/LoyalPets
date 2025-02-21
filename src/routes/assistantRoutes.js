@@ -3,6 +3,7 @@ const router = express.Router();
 const OpenAI = require('openai');
 const { tavily } = require('@tavily/core');
 const pool = require('../config/database');
+const { isAdmin } = require('./adminRoutes');
 
 // Update the uncertainty indicators to include location-based queries
 const uncertaintyIndicators = [
@@ -346,17 +347,79 @@ async function searchTavily(query, petInfo) {
   }
 }
 
-// Send message and get response
+// Add these helper functions at the top of the file
+async function createChatSession(userId, deviceType) {
+  const result = await pool.query(
+    'INSERT INTO chat_sessions (user_id, device_type) VALUES ($1, $2) RETURNING id',
+    [userId, deviceType]
+  );
+  return result.rows[0].id;
+}
+
+async function updateChatSession(sessionId, messageCount) {
+  await pool.query(
+    'UPDATE chat_sessions SET messages_count = $1 WHERE id = $2',
+    [messageCount, sessionId]
+  );
+}
+
+async function endChatSession(sessionId) {
+  await pool.query(
+    'UPDATE chat_sessions SET end_time = CURRENT_TIMESTAMP WHERE id = $1',
+    [sessionId]
+  );
+}
+
+async function detectTopic(message) {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'Categorize this pet health message into one of these topics: Symptoms, Treatment, Diet, Emergency, Behavior, Prevention, Medication, General Care. Return only the topic name.'
+        },
+        { role: 'user', content: message }
+      ],
+      temperature: 0.3,
+      max_tokens: 10
+    });
+    return completion.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error detecting topic:', error);
+    return 'General Care';
+  }
+}
+
+// Modify the /message route to track metrics
 router.post('/message', async (req, res) => {
   const { threadId, message, petInfo } = req.body;
+  const startTime = new Date();
+  let sessionId;
 
   try {
-    console.log('Processing message:', { threadId, message });
+    // Get user agent and extract device type
+    const userAgent = req.headers['user-agent'];
+    const deviceType = userAgent.includes('Mobile') ? 'mobile' : 'desktop';
+
+    // Create or get session ID from request
+    if (!req.headers['session-id']) {
+      sessionId = await createChatSession(petInfo.userId, deviceType);
+    } else {
+      sessionId = req.headers['session-id'];
+    }
 
     // Store user message in database
+    const userMessageResult = await pool.query(
+      'INSERT INTO chat_messages (pet_id, thread_id, message, role, session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [petInfo.id, threadId, message, 'user', sessionId]
+    );
+
+    // Detect and store topic
+    const topic = await detectTopic(message);
     await pool.query(
-      'INSERT INTO chat_messages (pet_id, thread_id, message, role) VALUES ($1, $2, $3, $4)',
-      [petInfo.id, threadId, message, 'user']
+      'INSERT INTO chat_topics (message_id, topic) VALUES ($1, $2)',
+      [userMessageResult.rows[0].id, topic]
     );
 
     // Update last_updated timestamp for the pet
@@ -470,23 +533,54 @@ router.post('/message', async (req, res) => {
       }
     }
 
-    // Store in database with source information
+    // Calculate response time
+    const endTime = new Date();
+    const responseTime = endTime - startTime;
+
+    // Store assistant message with metrics
     await pool.query(
-      'INSERT INTO chat_messages (pet_id, thread_id, message, role, source) VALUES ($1, $2, $3, $4, $5)',
-      [petInfo.id, threadId, finalResponse, 'assistant', source]
+      'INSERT INTO chat_messages (pet_id, thread_id, message, role, response_time, is_understood, session_id, source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [
+        petInfo.id,
+        threadId,
+        finalResponse,
+        'assistant',
+        `${responseTime} milliseconds`,
+        !uncertaintyIndicators.some(indicator => 
+          response.toLowerCase().includes(indicator.toLowerCase())
+        ),
+        sessionId,
+        source
+      ]
     );
+
+    // Update session message count
+    await updateChatSession(sessionId, 2); // Increment by 2 for the pair of messages
 
     res.json({
       response: finalResponse,
-      source: source, // Include source in response
+      source: source,
+      sessionId: sessionId // Return session ID to client
     });
   } catch (error) {
     console.error('Error in /message route:', error);
     res.status(500).json({
       error: error.message,
       details: error.toString(),
-      stack: error.stack,
+      stack: error.stack
     });
+  }
+});
+
+// Add new endpoint to end chat session
+router.post('/end-session', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    await endChatSession(sessionId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error ending session:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -564,6 +658,28 @@ router.get('/check-update/:petId', async (req, res) => {
     res.json({ needsUpdate: needsHealthUpdate });
   } catch (error) {
     console.error('Error checking update status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/end-session', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    
+    // Check if session already ended
+    const sessionCheck = await pool.query(
+      'SELECT end_time FROM chat_sessions WHERE id = $1',
+      [sessionId]
+    );
+    
+    if (sessionCheck.rows[0]?.end_time) {
+      return res.json({ success: true, message: 'Session already ended' });
+    }
+    
+    await endChatSession(sessionId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error ending session:', error);
     res.status(500).json({ error: error.message });
   }
 });
