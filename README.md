@@ -15,6 +15,7 @@ A comprehensive backend API for a pet health management system with AI-powered c
 - [Error Handling](#error-handling)
 - [Security](#security)
 - [Rate Limiting](#rate-limiting)
+- [Additional API Endpoints](#additional-api-endpoints)
 
 ---
 ## Overview
@@ -69,6 +70,9 @@ Create a `.env` file with the following:
 ```
 DATABASE_URL=postgres://user:password@host:port/dbname
 JWT_SECRET=your_jwt_secret
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_ORG_ID=your_openai_org_id
+TAVILY_API_KEY=your_tavily_api_key
 ```
 
 ---
@@ -232,6 +236,19 @@ npm run migrate:up
 }
 ```
 
+### Get Chat History
+**Endpoint:** `GET /api/assistant/chat-history/:petId`
+**Response:** Array of chat message objects
+
+### Check Update Status
+**Endpoint:** `GET /api/assistant/check-update/:petId`
+**Response:**
+```json
+{
+    "needsUpdate": boolean
+}
+```
+
 ---
 ## Feedback
 
@@ -276,6 +293,55 @@ npm run migrate:up
 ]
 ```
 
+### Get Disease Distribution
+**Endpoint:** `GET /api/admin/diseases`
+**Response:**
+```json
+[
+    {
+        "disease": "string",
+        "count": "number"
+    }
+]
+```
+
+### Get Feedback Ratings
+**Endpoint:** `GET /api/admin/ratings`
+**Response:**
+```json
+[
+    {
+        "rating": "number",
+        "count": "number"
+    }
+]
+```
+
+### Get User Growth
+**Endpoint:** `GET /api/admin/user-growth`
+**Response:**
+```json
+[
+    {
+        "month": "string",
+        "new_users": "number"
+    }
+]
+```
+
+### Get Disease by Pet Type
+**Endpoint:** `GET /api/admin/disease-by-pet-type`
+**Response:**
+```json
+[
+    {
+        "pet_type": "string",
+        "disease": "string",
+        "count": "number"
+    }
+]
+```
+
 ---
 ## Error Handling
 
@@ -302,4 +368,34 @@ Error responses include a message:
 ---
 ## Rate Limiting
 Currently, no rate limiting is implemented. Consider adding rate limiting for production use.
+
+---
+## Additional API Endpoints
+
+## Request Headers
+All authenticated endpoints require:
+```
+Authorization: Bearer <jwt_token>
+```
+
+For chat messages, include session ID if available:
+```
+Session-Id: <session_id>
+```
+
+## Chat Session Management
+- Sessions are automatically created on first message
+- Session ID is returned in the first message response
+- Use the session ID in subsequent requests for better analytics
+
+## Database Schema Updates
+The pets table includes additional fields:
+- `thread_id`: For storing OpenAI thread references
+- `last_updated`: Timestamp for tracking health updates
+- `user_id`: Foreign key to users table
+
+## Technologies Used (Additional)
+- **AI Integration**: OpenAI API
+- **Search Integration**: Tavily API
+- **Migration**: node-pg-migrate
 
