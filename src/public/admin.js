@@ -24,16 +24,28 @@ async function checkAdminAccess() {
 
 // Load overall statistics
 async function loadStats() {
-  const response = await fetch('/api/admin/stats', {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  const stats = await response.json();
+  const [statsResponse, metricsResponse] = await Promise.all([
+    fetch('/api/admin/stats', {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    }),
+    fetch('/api/admin/engagement-metrics', {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+  ]);
+
+  const stats = await statsResponse.json();
+  const metrics = await metricsResponse.json();
   
   document.getElementById('totalUsers').textContent = stats.total_users;
   document.getElementById('totalPets').textContent = stats.total_pets;
   document.getElementById('avgRating').textContent = stats.avg_rating;
+  document.getElementById('monthlyActiveUsers').textContent = metrics.monthly_active_users || '0';
+  document.getElementById('avgSessionDuration').textContent = 
+    `${metrics.avg_session_duration_minutes || '0'} mins`;
 }
 
 // Create pet types chart
@@ -221,6 +233,83 @@ function getRandomColor() {
   return color;
 }
 
+// Load engagement metrics
+async function loadEngagementMetrics() {
+  const response = await fetch('/api/admin/engagement-metrics', {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  const data = await response.json();
+  
+  // Update stats cards
+  document.getElementById('monthlyActiveUsers').textContent = data.engagement.monthly_active_users;
+  document.getElementById('avgSessionDuration').textContent = 
+    `${data.engagement.avg_session_duration_minutes} mins`;
+
+  // Create conversations chart
+  new Chart(document.getElementById('conversationsChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Daily', 'Weekly', 'Monthly'],
+      datasets: [{
+        label: 'Conversations',
+        data: [
+          data.engagement.daily_conversations,
+          data.engagement.weekly_conversations,
+          data.engagement.monthly_conversations
+        ],
+        backgroundColor: '#4BC0C0'
+      }]
+    }
+  });
+
+  // Create topics chart
+  new Chart(document.getElementById('topicsChart'), {
+    type: 'doughnut',
+    data: {
+      labels: data.topics.map(t => t.topic),
+      datasets: [{
+        data: data.topics.map(t => t.count),
+        backgroundColor: generateColorArray(data.topics.length)
+      }]
+    }
+  });
+
+  // Create device distribution chart
+  new Chart(document.getElementById('deviceChart'), {
+    type: 'pie',
+    data: {
+      labels: data.devices.map(d => d.device_type),
+      datasets: [{
+        data: data.devices.map(d => d.count),
+        backgroundColor: generateColorArray(data.devices.length)
+      }]
+    }
+  });
+
+  // Create response metrics chart
+  new Chart(document.getElementById('responseMetricsChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Avg Response Time (s)', 'Understanding Rate (%)'],
+      datasets: [{
+        data: [
+          data.response.avg_response_time,
+          ((data.response.total_queries - data.response.misunderstood_queries) / 
+           data.response.total_queries * 100).toFixed(2)
+        ],
+        backgroundColor: ['#FF6384', '#36A2EB']
+      }]
+    }
+  });
+}
+
+// Helper function for generating colors
+function generateColorArray(length) {
+  return Array.from({ length }, () => getRandomColor());
+}
+
 // Initialize dashboard
 async function initDashboard() {
   await checkAdminAccess();
@@ -230,6 +319,7 @@ async function initDashboard() {
   await createRatingsChart();
   await createUserGrowthChart();
   await createDiseaseByPetTypeChart();
+  await loadEngagementMetrics();
 }
 
 window.onload = initDashboard; 
