@@ -4,13 +4,13 @@
   "values": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000",
+      "value": "https://loyal-pets.vercel.app",
       "type": "default",
       "enabled": true
     },
     {
-      "key": "prodUrl",
-      "value": "https://your-vercel-deployment-url.vercel.app",
+      "key": "localUrl",
+      "value": "http://localhost:3000",
       "type": "default",
       "enabled": false
     },
@@ -18,6 +18,12 @@
       "key": "authToken",
       "value": "",
       "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "threadId",
+      "value": "",
+      "type": "default",
       "enabled": true
     }
   ],

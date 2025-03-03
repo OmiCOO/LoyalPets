@@ -10,6 +10,20 @@
       "item": [
         {
           "name": "Signup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set(\"authToken\", jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -32,6 +46,20 @@
         },
         {
           "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set(\"authToken\", jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -142,7 +170,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"thread_id\": \"thread_123456789\"\n}"
+              "raw": "{\n    \"thread_id\": \"{{threadId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/pets/:id/thread",
@@ -198,7 +226,39 @@
       "name": "Assistant",
       "item": [
         {
-          "name": "Chat with Assistant",
+          "name": "Get Assistant Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assistant/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assistant", "status"]
+            },
+            "description": "Check if the assistant is initialized"
+          }
+        },
+        {
+          "name": "Create New Thread",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.threadId) {",
+                  "    pm.environment.set(\"threadId\", jsonData.threadId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -213,14 +273,90 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"message\": \"What should I feed my dog?\",\n    \"threadId\": \"thread_123456789\"\n}"
+              "raw": "{\n    \"petId\": 1,\n    \"petInfo\": {\n        \"id\": 1,\n        \"name\": \"Fluffy\",\n        \"type\": \"Dog\",\n        \"breed\": \"Golden Retriever\",\n        \"disease\": \"None\",\n        \"symptoms\": \"Healthy\"\n    }\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/assistant/chat",
+              "raw": "{{baseUrl}}/api/assistant/thread",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "assistant", "chat"]
+              "path": ["api", "assistant", "thread"]
+            },
+            "description": "Create a new thread for the assistant"
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"threadId\": \"{{threadId}}\",\n    \"message\": \"What should I feed my dog?\",\n    \"petInfo\": {\n        \"id\": 1,\n        \"name\": \"Fluffy\",\n        \"type\": \"Dog\",\n        \"breed\": \"Golden Retriever\",\n        \"disease\": \"None\",\n        \"symptoms\": \"Healthy\",\n        \"userId\": 1\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/assistant/message",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assistant", "message"]
             },
             "description": "Send a message to the AI assistant"
+          }
+        },
+        {
+          "name": "Get Chat History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assistant/chat-history/:petId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assistant", "chat-history", ":petId"],
+              "variable": [
+                {
+                  "key": "petId",
+                  "value": "1",
+                  "description": "Pet ID"
+                }
+              ]
+            },
+            "description": "Get chat history for a pet"
+          }
+        },
+        {
+          "name": "Check Update Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assistant/check-update/:petId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assistant", "check-update", ":petId"],
+              "variable": [
+                {
+                  "key": "petId",
+                  "value": "1",
+                  "description": "Pet ID"
+                }
+              ]
+            },
+            "description": "Check if a pet needs health update"
           }
         }
       ]
@@ -244,7 +380,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"rating\": 5,\n    \"comment\": \"Great service!\"\n}"
+              "raw": "{\n    \"pet_id\": 1,\n    \"thread_id\": \"{{threadId}}\",\n    \"rating\": 5,\n    \"comment\": \"Very helpful assistant!\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/feedback",
@@ -276,6 +412,60 @@
             },
             "description": "Get all users (admin only)"
           }
+        },
+        {
+          "name": "Get Platform Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "stats"]
+            },
+            "description": "Get platform statistics (admin only)"
+          }
+        },
+        {
+          "name": "Get Pet Types Distribution",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pet-types",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pet-types"]
+            },
+            "description": "Get distribution of pet types (admin only)"
+          }
+        },
+        {
+          "name": "Get Disease Distribution",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/diseases",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "diseases"]
+            },
+            "description": "Get distribution of diseases (admin only)"
+          }
         }
       ]
     }
@@ -299,7 +489,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000",
+      "value": "https://loyal-pets.vercel.app",
       "type": "string",
       "description": "Base URL for the API"
     },
@@ -308,6 +498,12 @@
       "value": "",
       "type": "string",
       "description": "Authentication token received after login"
+    },
+    {
+      "key": "threadId",
+      "value": "",
+      "type": "string",
+      "description": "Thread ID for the assistant conversation"
     }
   ]
 } 
