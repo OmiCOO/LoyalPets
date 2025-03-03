@@ -391,7 +391,10 @@ async function detectTopic(message) {
   }
 }
 
-// Modify the /message route to track metrics
+// Store run status in memory (in production, use a database or Redis)
+const runStatusMap = new Map();
+
+// Modify the /message route to be asynchronous
 router.post('/message', async (req, res) => {
   const { threadId, message, petInfo } = req.body;
   const startTime = new Date();
@@ -415,11 +418,13 @@ router.post('/message', async (req, res) => {
       [petInfo.id, threadId, message, 'user', sessionId]
     );
 
+    const messageId = userMessageResult.rows[0].id;
+
     // Detect and store topic
     const topic = await detectTopic(message);
     await pool.query(
       'INSERT INTO chat_topics (message_id, topic) VALUES ($1, $2)',
-      [userMessageResult.rows[0].id, topic]
+      [messageId, topic]
     );
 
     // Update last_updated timestamp for the pet
@@ -451,11 +456,128 @@ router.post('/message', async (req, res) => {
     });
     console.log('Run created:', run.id);
 
-    // Wait for the completion with more detailed status logging
-    let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+    // Store the run information
+    runStatusMap.set(run.id, {
+      status: 'in_progress',
+      threadId,
+      petInfo,
+      messageId,
+      startTime,
+      sessionId,
+      attempts: 0
+    });
+
+    // Start the background processing
+    processRunInBackground(run.id, threadId, petInfo, messageId, sessionId, startTime);
+
+    // Return immediately with the run ID
+    res.json({
+      runId: run.id,
+      status: 'in_progress',
+      message: 'Your request is being processed. Check the status using the /message-status endpoint.'
+    });
+
+  } catch (error) {
+    console.error('Error in message processing:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add a new endpoint to check message status
+router.get('/message-status/:runId', async (req, res) => {
+  const { runId } = req.params;
+  
+  try {
+    // Check if we have the run in our map
+    if (!runStatusMap.has(runId)) {
+      // If not in our map, check with OpenAI directly
+      try {
+        const threadId = req.query.threadId;
+        if (!threadId) {
+          return res.status(400).json({ 
+            error: 'threadId query parameter is required when runId is not found in local cache' 
+          });
+        }
+        
+        const runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+        
+        if (runStatus.status === 'completed') {
+          // Get the messages
+          const messages = await openai.beta.threads.messages.list(threadId);
+          if (messages.data.length === 0) {
+            return res.status(404).json({ error: 'No messages found in thread' });
+          }
+          
+          const lastMessage = messages.data[0];
+          if (!lastMessage.content[0]?.text?.value) {
+            return res.status(500).json({ error: 'Invalid message format received' });
+          }
+          
+          return res.json({
+            status: 'completed',
+            response: lastMessage.content[0].text.value,
+            source: 'assistant'
+          });
+        } else {
+          return res.json({
+            status: runStatus.status,
+            message: 'Your request is still being processed.'
+          });
+        }
+      } catch (error) {
+        return res.status(404).json({ 
+          error: 'Run not found or error retrieving run status',
+          details: error.message
+        });
+      }
+    }
+    
+    // Get the run status from our map
+    const runInfo = runStatusMap.get(runId);
+    
+    if (runInfo.status === 'completed') {
+      // Return the completed response
+      res.json({
+        status: 'completed',
+        response: runInfo.response,
+        source: runInfo.source
+      });
+      
+      // Clean up the map to prevent memory leaks (optional)
+      // Only remove after a successful response
+      runStatusMap.delete(runId);
+    } else if (runInfo.status === 'failed') {
+      res.status(500).json({
+        status: 'failed',
+        error: runInfo.error
+      });
+    } else {
+      // Still in progress
+      res.json({
+        status: runInfo.status,
+        message: 'Your request is still being processed.'
+      });
+    }
+  } catch (error) {
+    console.error('Error checking message status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Function to process the run in the background
+async function processRunInBackground(runId, threadId, petInfo, messageId, sessionId, startTime) {
+  try {
+    let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
     let attempts = 0;
     const maxAttempts = 30; // Increase timeout to 60 seconds
     const waitTime = 2000; // Wait 2 seconds between attempts
+
+    // Update the run info with the current status
+    runStatusMap.set(runId, {
+      ...runStatusMap.get(runId),
+      status: runStatus.status,
+      attempts
+    });
 
     while (attempts < maxAttempts) {
       console.log(
@@ -471,29 +593,54 @@ router.post('/message', async (req, res) => {
         // Get the run details to see why it failed
         const runDetails = await openai.beta.threads.runs.retrieve(
           threadId,
-          run.id
+          runId
         );
         console.error('Run failed with details:', runDetails);
-        throw new Error(
-          `Run failed with status: ${runStatus.status}. Last error: ${
+        
+        // Update the run status map
+        runStatusMap.set(runId, {
+          ...runStatusMap.get(runId),
+          status: 'failed',
+          error: `Run failed with status: ${runStatus.status}. Last error: ${
             runDetails.last_error?.message || 'Unknown error'
           }`
-        );
+        });
+        
+        return;
       }
 
       if (runStatus.status === 'expired') {
-        throw new Error('Run expired');
+        // Update the run status map
+        runStatusMap.set(runId, {
+          ...runStatusMap.get(runId),
+          status: 'failed',
+          error: 'Run expired'
+        });
+        
+        return;
       }
 
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-      runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+      runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
       attempts++;
+      
+      // Update the run info with the current status
+      runStatusMap.set(runId, {
+        ...runStatusMap.get(runId),
+        status: runStatus.status,
+        attempts
+      });
     }
 
     if (runStatus.status !== 'completed') {
-      throw new Error(
-        `Assistant response timed out after ${maxAttempts} seconds. Final status: ${runStatus.status}`
-      );
+      // Update the run status map
+      runStatusMap.set(runId, {
+        ...runStatusMap.get(runId),
+        status: 'failed',
+        error: `Assistant response timed out after ${maxAttempts} seconds. Final status: ${runStatus.status}`
+      });
+      
+      return;
     }
 
     // Get the messages
@@ -501,14 +648,28 @@ router.post('/message', async (req, res) => {
     const messages = await openai.beta.threads.messages.list(threadId);
 
     if (messages.data.length === 0) {
-      throw new Error('No messages found in thread');
+      // Update the run status map
+      runStatusMap.set(runId, {
+        ...runStatusMap.get(runId),
+        status: 'failed',
+        error: 'No messages found in thread'
+      });
+      
+      return;
     }
 
     const lastMessage = messages.data[0];
     console.log('Retrieved last message:', lastMessage.id);
 
     if (!lastMessage.content[0]?.text?.value) {
-      throw new Error('Invalid message format received');
+      // Update the run status map
+      runStatusMap.set(runId, {
+        ...runStatusMap.get(runId),
+        status: 'failed',
+        error: 'Invalid message format received'
+      });
+      
+      return;
     }
 
     const response = lastMessage.content[0].text.value;
@@ -520,7 +681,7 @@ router.post('/message', async (req, res) => {
         response.toLowerCase().includes(indicator.toLowerCase())
       )
     ) {
-      const searchResults = await searchTavily(message, petInfo);
+      const searchResults = await searchTavily(petInfo.message, petInfo);
 
       if (searchResults && searchResults.length > 0) {
         const result = searchResults[0];
@@ -554,23 +715,29 @@ router.post('/message', async (req, res) => {
       ]
     );
 
-    // Update session message count
-    await updateChatSession(sessionId, 2); // Increment by 2 for the pair of messages
-
-    res.json({
+    // Update the run status map with the completed response
+    runStatusMap.set(runId, {
+      ...runStatusMap.get(runId),
+      status: 'completed',
       response: finalResponse,
-      source: source,
-      sessionId: sessionId // Return session ID to client
+      source,
+      responseTime
     });
+
+    // Update session message count
+    await updateChatSession(sessionId, 2); // Increment by 2 (user + assistant)
+
   } catch (error) {
-    console.error('Error in /message route:', error);
-    res.status(500).json({
-      error: error.message,
-      details: error.toString(),
-      stack: error.stack
+    console.error('Error in background processing:', error);
+    
+    // Update the run status map
+    runStatusMap.set(runId, {
+      ...runStatusMap.get(runId),
+      status: 'failed',
+      error: error.message
     });
   }
-});
+}
 
 // Add new endpoint to end chat session
 router.post('/end-session', async (req, res) => {

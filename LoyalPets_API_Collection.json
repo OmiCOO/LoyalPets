@@ -284,7 +284,21 @@
           }
         },
         {
-          "name": "Send Message",
+          "name": "Send Message (Async)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.runId) {",
+                  "    pm.environment.set(\"runId\", jsonData.runId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -306,7 +320,31 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "assistant", "message"]
             },
-            "description": "Send a message to the AI assistant"
+            "description": "Send a message to the AI assistant (asynchronous)"
+          }
+        },
+        {
+          "name": "Check Message Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assistant/message-status/{{runId}}?threadId={{threadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assistant", "message-status", "{{runId}}"],
+              "query": [
+                {
+                  "key": "threadId",
+                  "value": "{{threadId}}"
+                }
+              ]
+            },
+            "description": "Check the status of an asynchronous message request"
           }
         },
         {
@@ -504,6 +542,12 @@
       "value": "",
       "type": "string",
       "description": "Thread ID for the assistant conversation"
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string",
+      "description": "Run ID for the asynchronous message processing"
     }
   ]
 } 
