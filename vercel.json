@@ -43,10 +43,5 @@
       "src": "/(.*)",
       "dest": "/src/public/$1"
     }
-  ],
-  "functions": {
-    "src/app.js": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }
