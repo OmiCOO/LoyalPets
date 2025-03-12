@@ -4,7 +4,7 @@
   "values": [
     {
       "key": "baseUrl",
-      "value": "https://loyal-pets.vercel.app",
+      "value": "https://loyal-pets-omega.vercel.app",
       "type": "default",
       "enabled": true
     },

@@ -527,7 +527,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://loyal-pets.vercel.app",
+      "value": "https://loyal-pets-omega.vercel.app",
       "type": "string",
       "description": "Base URL for the API"
     },
