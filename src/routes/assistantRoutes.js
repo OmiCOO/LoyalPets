@@ -415,23 +415,40 @@ router.get('/message-status/:runId', async (req, res) => {
           });
         }
         
+        console.log(`Retrieving run status for run ${runId} in thread ${threadId} directly from OpenAI`);
         const runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+        console.log(`Direct OpenAI status for run ${runId}: ${runStatus.status}`);
         
         if (runStatus.status === 'completed') {
           // Get the messages
+          console.log(`Run ${runId} completed, retrieving messages...`);
           const messages = await openai.beta.threads.messages.list(threadId);
+          
           if (messages.data.length === 0) {
+            console.error(`No messages found in thread ${threadId}`);
             return res.status(404).json({ error: 'No messages found in thread' });
           }
           
           const lastMessage = messages.data[0];
-          if (!lastMessage.content[0]?.text?.value) {
+          console.log(`Retrieved message: ${lastMessage.id}`);
+          
+          // Check message format and debug
+          if (!lastMessage.content || !lastMessage.content[0]) {
+            console.error(`Message has no content: ${JSON.stringify(lastMessage)}`);
+            return res.status(500).json({ error: 'Message has no content' });
+          }
+          
+          if (!lastMessage.content[0].text || !lastMessage.content[0].text.value) {
+            console.error(`Invalid message format: ${JSON.stringify(lastMessage.content)}`);
             return res.status(500).json({ error: 'Invalid message format received' });
           }
           
+          const messageText = lastMessage.content[0].text.value;
+          console.log(`Message content retrieved (${messageText.length} chars)`);
+          
           return res.json({
             status: 'completed',
-            response: lastMessage.content[0].text.value,
+            response: messageText,
             source: 'assistant'
           });
         } else {
@@ -441,6 +458,7 @@ router.get('/message-status/:runId', async (req, res) => {
           });
         }
       } catch (error) {
+        console.error(`Error retrieving run ${runId} from OpenAI:`, error);
         return res.status(404).json({ 
           error: 'Run not found or error retrieving run status',
           details: error.message
@@ -450,8 +468,18 @@ router.get('/message-status/:runId', async (req, res) => {
     
     // Get the run status from our map
     const runInfo = runStatusMap.get(runId);
+    console.log(`Run ${runId} status from cache: ${runInfo.status}`);
     
     if (runInfo.status === 'completed') {
+      // Check if response exists in our map
+      if (!runInfo.response) {
+        console.error(`Run ${runId} marked completed but has no response`);
+        return res.status(500).json({
+          status: 'failed',
+          error: 'Response missing from completed run'
+        });
+      }
+      
       // Return the completed response
       res.json({
         status: 'completed',
@@ -565,6 +593,7 @@ async function processRunInBackground(runId, threadId, petInfo, messageId, sessi
 
     if (messages.data.length === 0) {
       // Update the run status map
+      console.error(`No messages found in thread ${threadId} for run ${runId}`);
       runStatusMap.set(runId, {
         ...runStatusMap.get(runId),
         status: 'failed',
@@ -577,18 +606,39 @@ async function processRunInBackground(runId, threadId, petInfo, messageId, sessi
     const lastMessage = messages.data[0];
     console.log('Retrieved last message:', lastMessage.id);
 
-    if (!lastMessage.content[0]?.text?.value) {
-      // Update the run status map
+    // More detailed message format validation
+    if (!lastMessage.content || !Array.isArray(lastMessage.content) || lastMessage.content.length === 0) {
+      console.error(`Message has no content array: ${JSON.stringify(lastMessage)}`);
       runStatusMap.set(runId, {
         ...runStatusMap.get(runId),
         status: 'failed',
-        error: 'Invalid message format received'
+        error: 'Message has no content array'
       });
-      
+      return;
+    }
+
+    if (!lastMessage.content[0] || !lastMessage.content[0].text) {
+      console.error(`Message content has no text field: ${JSON.stringify(lastMessage.content)}`);
+      runStatusMap.set(runId, {
+        ...runStatusMap.get(runId),
+        status: 'failed',
+        error: 'Message content has no text field'
+      });
+      return;
+    }
+
+    if (!lastMessage.content[0].text.value) {
+      console.error(`Message text has no value: ${JSON.stringify(lastMessage.content[0].text)}`);
+      runStatusMap.set(runId, {
+        ...runStatusMap.get(runId),
+        status: 'failed',
+        error: 'Message text has no value'
+      });
       return;
     }
 
     const response = lastMessage.content[0].text.value;
+    console.log(`Retrieved response content (${response.length} chars)`);
     let source = 'assistant'; // Default source
 
     let finalResponse = response;
@@ -659,6 +709,7 @@ async function processRunInBackground(runId, threadId, petInfo, messageId, sessi
     }
 
     // Update the run status map with the completed response
+    console.log(`Updating run status map with completed response (${finalResponse.length} chars)`);
     runStatusMap.set(runId, {
       ...runStatusMap.get(runId),
       status: 'completed',
@@ -666,6 +717,15 @@ async function processRunInBackground(runId, threadId, petInfo, messageId, sessi
       source,
       responseTime
     });
+    
+    // Double check that the response was properly saved
+    const savedRunInfo = runStatusMap.get(runId);
+    if (!savedRunInfo.response) {
+      console.error(`Failed to save response to runStatusMap for run ${runId}`);
+      console.error(`Run info: ${JSON.stringify(savedRunInfo)}`);
+    } else {
+      console.log(`Successfully saved response to runStatusMap for run ${runId}`);
+    }
 
   } catch (error) {
     console.error('Error in background processing:', error);

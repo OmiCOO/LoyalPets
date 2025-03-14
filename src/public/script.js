@@ -521,8 +521,20 @@ async function pollForCompletion(runId, threadId) {
       
       const statusData = await statusResponse.json();
       
+      // Add more detailed debugging
+      console.log('Full statusData response:', JSON.stringify(statusData, null, 2));
+      
       if (statusData.status === 'completed') {
         // We have the final response
+        console.log('Response received:', statusData.response);
+        
+        // Check for undefined response explicitly
+        if (!statusData.response) {
+          console.error('Error: Response is undefined or empty from the server');
+          addMessageToChat('Sorry, I received an empty response. Please try again later.', 'assistant', 'error');
+          return false;
+        }
+        
         addMessageToChat(statusData.response, 'assistant', statusData.source || 'assistant');
         return true;
       } else if (statusData.status === 'failed') {
