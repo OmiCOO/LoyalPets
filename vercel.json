@@ -32,20 +32,48 @@
       "dest": "/src/public/admin.js"
     },
     {
-      "src": "/index.html",
-      "dest": "/src/public/index.html"
+      "src": "/signup",
+      "dest": "/src/public/signup.html"
     },
     {
       "src": "/signup.html",
       "dest": "/src/public/signup.html"
     },
     {
+      "src": "/login",
+      "dest": "/src/public/login.html"
+    },
+    {
       "src": "/login.html",
       "dest": "/src/public/login.html"
     },
     {
+      "src": "/index",
+      "dest": "/src/public/index.html"
+    },
+    {
+      "src": "/index.html",
+      "dest": "/src/public/index.html"
+    },
+    {
       "src": "/",
       "dest": "/src/public/login.html"
+    },
+    {
+      "src": "/admin-dashboard",
+      "dest": "/src/public/admin-dashboard.html"
+    },
+    {
+      "src": "/admin-dashboard.html",
+      "dest": "/src/public/admin-dashboard.html"
+    },
+    {
+      "src": "/(.*)\\.html",
+      "dest": "/src/public/$1.html"
+    },
+    {
+      "src": "/([^.]+)$",
+      "dest": "/src/public/$1.html"
     },
     {
       "src": "/(.*)",
