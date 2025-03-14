@@ -5,12 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pet Health Tracker</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script>
+      // Check authentication immediately
+      (function() {
+        // Redirect to login if no token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.log('No auth token, redirecting to login');
+          window.location.href = '/login.html';
+        } else {
+          console.log('Auth token found, proceeding to app');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div class="container">
       <h1>Pet Health Information</h1>
       <div id="adminNav" style="display: none;">
         <a href="/admin-dashboard.html" class="admin-link">Admin Dashboard</a>
+      </div>
+      <div class="user-controls">
+        <button onclick="logout()" class="logout-btn">Logout</button>
       </div>
       <form id="petForm">
         <div class="form-group">
@@ -92,7 +108,6 @@
         <button id="submitFeedback">Submit Feedback</button>
       </div>
     </div>
-    <button onclick="logout()" class="logout-btn">Logout</button>
     <script src="/script.js"></script>
   </body>
 </html>

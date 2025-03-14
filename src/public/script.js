@@ -1,9 +1,11 @@
 function checkAuth() {
   const token = localStorage.getItem('token');
   if (!token) {
+    console.log('No auth token found, redirecting to login');
     window.location.href = '/login.html';
     return false;
   }
+  console.log('Auth token found, user is authenticated');
   return true;
 }
 
@@ -103,8 +105,13 @@ let feedbackCount = 0;
 
 // Add click event to pet cards
 function addPetCardListeners() {
-  document.querySelectorAll('.pet-card').forEach((card) => {
+  console.log('Adding click listeners to pet cards');
+  const petCards = document.querySelectorAll('.pet-card');
+  console.log(`Found ${petCards.length} pet cards to add listeners to`);
+  
+  petCards.forEach((card) => {
     card.addEventListener('click', async () => {
+      console.log('Pet card clicked with ID:', card.dataset.petId);
       try {
         // Set currentPetInfo first
         currentPetInfo = {
@@ -124,14 +131,20 @@ function addPetCardListeners() {
             .textContent.replace('Symptoms: ', ''),
         };
 
-        console.log('Pet card clicked:', currentPetInfo);
+        console.log('Pet info extracted:', currentPetInfo);
 
         // First check if pet has an existing thread
+        console.log('Fetching pet data from API...');
         const petResponse = await fetch(`/api/pets/${currentPetInfo.id}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
           },
         });
+        
+        if (!petResponse.ok) {
+          throw new Error(`Failed to fetch pet data: ${petResponse.status} ${petResponse.statusText}`);
+        }
+        
         const petData = await petResponse.json();
         console.log('Pet data retrieved:', petData);
 
@@ -207,24 +220,42 @@ function addPetCardListeners() {
 
         // Load chat history and show interface
         await loadChatHistory(currentPetInfo.id);
-        document.getElementById('chatInterface').classList.remove('hidden');
+        
+        // Show chat interface with proper error handling
+        const chatInterface = document.getElementById('chatInterface');
+        if (chatInterface) {
+          chatInterface.classList.remove('hidden');
+          console.log('Chat interface is now visible');
+          
+          // Make sure to scroll to the chat interface
+          chatInterface.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          console.error('Failed to find chat interface element');
+          alert('Error: Could not display chat interface. Please refresh the page and try again.');
+        }
 
         // Only add initial message if no chat history
         const chatMessages = document.getElementById('chatMessages');
-        if (!chatMessages.innerHTML.trim()) {
-          chatMessages.innerHTML = `
-                        <div class="message assistant-message">
-                            I'm here to help with ${currentPetInfo.name}, a ${
-            currentPetInfo.breed
-          } ${currentPetInfo.type.toLowerCase()}. 
-                            They are currently dealing with ${
-                              currentPetInfo.disease
-                            }. How can I assist you?
-                        </div>
-                    `;
+        if (chatMessages) {
+          if (!chatMessages.innerHTML.trim()) {
+            chatMessages.innerHTML = `
+              <div class="message assistant-message">
+                  I'm here to help with ${currentPetInfo.name}, a ${
+              currentPetInfo.breed
+            } ${currentPetInfo.type.toLowerCase()}. 
+                  They are currently dealing with ${
+                    currentPetInfo.disease
+                  }. How can I assist you?
+              </div>
+            `;
+            console.log('Added initial assistant message');
+          }
+        } else {
+          console.error('Could not find chatMessages element');
         }
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Error handling pet card click:', error);
+        alert(`Error: ${error.message || 'An unknown error occurred while loading pet information.'}`);
       }
     });
   });
@@ -261,70 +292,42 @@ document.getElementById('sendMessage').addEventListener('click', async () => {
   });
 
   // Add user message to chat
-  const chatMessages = document.getElementById('chatMessages');
-  chatMessages.innerHTML += `
-        <div class="message user-message">${message}</div>
-    `;
-
+  addMessageToChat(message, 'user');
   messageInput.value = '';
 
   // Add loading indicator
   const loadingId = Date.now();
-  chatMessages.innerHTML += `
-        <div id="loading-${loadingId}" class="message assistant-message">
-            <em>Assistant is thinking...</em>
-        </div>
-    `;
+  const chatMessages = document.getElementById('chatMessages');
+  const loadingElement = document.createElement('div');
+  loadingElement.id = `loading-${loadingId}`;
+  loadingElement.className = 'message assistant-message';
+  loadingElement.innerHTML = '<em>Assistant is thinking...</em>';
+  chatMessages.appendChild(loadingElement);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 
   try {
-    const response = await fetch('/api/assistant/message', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-      body: JSON.stringify({
-        threadId: currentThreadId,
-        message,
-        petInfo: currentPetInfo,
-      }),
-    });
-
-    // Remove loading message
-    document.getElementById(`loading-${loadingId}`).remove();
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to get response');
-    }
-
-    const data = await response.json();
-
-    // Add assistant response to chat
-    chatMessages.innerHTML += `
-            <div class="message assistant-message">${data.response}</div>
-        `;
-
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    messageCount++;
-    console.log('Message count:', messageCount);
+    // Use the improved sendMessage function which handles the polling internally
+    await sendMessage(message);
     
-    if (messageCount >= MESSAGE_THRESHOLD) {
-      console.log('Showing feedback form after threshold');
-      showFeedbackForm();
+    // Remove loading message if it still exists
+    const loadingIndicator = document.getElementById(`loading-${loadingId}`);
+    if (loadingIndicator) {
+      loadingIndicator.remove();
     }
   } catch (error) {
     console.error('Error:', error);
-    // Remove loading message
-    document.getElementById(`loading-${loadingId}`).remove();
+    // Remove loading message if it still exists
+    const loadingIndicator = document.getElementById(`loading-${loadingId}`);
+    if (loadingIndicator) {
+      loadingIndicator.remove();
+    }
 
     chatMessages.innerHTML += `
-            <div class="message assistant-message error">
-                Error: ${error.message || 'Failed to get response'}
-            </div>
-        `;
+        <div class="message assistant-message error">
+            Error: ${error.message || 'Failed to get response'}
+        </div>
+    `;
+    chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 });
 
@@ -408,22 +411,47 @@ function addMessageToChat(message, role, source) {
 
 async function sendMessage(message) {
   try {
+    // Check for required values
+    if (!currentThreadId) {
+      console.error('No thread ID available');
+      addMessageToChat('Error: No conversation thread available. Please reload the page and try again.', 'assistant', 'error');
+      return;
+    }
+    
+    if (!currentPetInfo || !currentPetInfo.id) {
+      console.error('No pet information available');
+      addMessageToChat('Error: Pet information is missing. Please reload the page and try again.', 'assistant', 'error');
+      return;
+    }
+    
+    // Get stored user ID with fallback
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.warn('No user ID found in local storage, this may cause tracking issues');
+    }
+    
+    // Use the original asynchronous endpoint that's serverless-friendly
     const response = await fetch('/api/assistant/message', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Session-Id': currentSessionId
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        'Session-Id': currentSessionId || ''
       },
       body: JSON.stringify({
         threadId: currentThreadId,
         message: message,
         petInfo: {
           ...currentPetInfo,
-          userId: localStorage.getItem('userId')
+          userId: userId
         }
       }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get response');
+    }
 
     const data = await response.json();
     
@@ -432,7 +460,18 @@ async function sendMessage(message) {
       currentSessionId = data.sessionId;
     }
 
-    addMessageToChat(data.response, 'assistant', data.source);
+    // Chat message should be in-progress with a runId
+    if (data.status === 'in_progress' && data.runId) {
+      // Poll for the message status until completed
+      await pollForCompletion(data.runId, currentThreadId);
+    } else if (data.response) {
+      // For immediate responses (rare case but handle it)
+      addMessageToChat(data.response, 'assistant', data.source || 'assistant');
+    } else {
+      // Fallback for unexpected response format
+      console.error('Unexpected response format:', data);
+      addMessageToChat("Sorry, I couldn't process your request properly.", 'assistant', 'error');
+    }
 
     messageCount++;
     
@@ -441,7 +480,75 @@ async function sendMessage(message) {
     }
   } catch (error) {
     console.error('Error:', error);
+    addMessageToChat(`Sorry, there was an error: ${error.message}`, 'assistant', 'error');
   }
+}
+
+// Helper function to poll for message completion
+async function pollForCompletion(runId, threadId) {
+  // Poll with exponential backoff
+  const maxAttempts = 30;
+  let attempt = 0;
+  let delay = 1000; // Start with 1 second delay
+
+  // Find any existing loading indicators
+  const loadingIndicators = document.querySelectorAll('.assistant-message em');
+  const updateLoadingText = (text) => {
+    loadingIndicators.forEach(indicator => {
+      if (indicator.textContent.includes('thinking') || indicator.textContent.includes('...')) {
+        indicator.textContent = text;
+      }
+    });
+  };
+  
+  while (attempt < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    try {
+      // Update loading text to show we're still working
+      updateLoadingText(`Assistant is thinking${'.'.repeat((attempt % 3) + 1)}`);
+      
+      const statusResponse = await fetch(`/api/assistant/message-status/${runId}?threadId=${threadId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!statusResponse.ok) {
+        const errorData = await statusResponse.json();
+        throw new Error(errorData.error || 'Failed to check message status');
+      }
+      
+      const statusData = await statusResponse.json();
+      
+      if (statusData.status === 'completed') {
+        // We have the final response
+        addMessageToChat(statusData.response, 'assistant', statusData.source || 'assistant');
+        return true;
+      } else if (statusData.status === 'failed') {
+        // Handle error
+        console.error('Assistant run failed:', statusData.error);
+        addMessageToChat(`Sorry, I encountered an error: ${statusData.error}`, 'assistant', 'error');
+        return false;
+      }
+      
+      // We're still waiting for completion
+      console.log(`Polling attempt ${attempt + 1}/${maxAttempts}: Status is ${statusData.status}`);
+      
+      // Increase delay with each attempt (exponential backoff)
+      delay = Math.min(delay * 1.5, 5000); // Cap at 5 seconds
+      attempt++;
+    } catch (error) {
+      console.error('Error polling for status:', error);
+      // Continue polling despite errors
+      delay = Math.min(delay * 1.5, 5000);
+      attempt++;
+    }
+  }
+  
+  // Timed out after max attempts
+  addMessageToChat("Sorry, it's taking longer than expected to process your request. Please try again later.", 'assistant', 'error');
+  return false;
 }
 
 async function handleHealthUpdate() {

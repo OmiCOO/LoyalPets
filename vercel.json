@@ -28,11 +28,19 @@
       "dest": "/src/public/script.js"
     },
     {
-      "src": "/signup",
+      "src": "/admin.js",
+      "dest": "/src/public/admin.js"
+    },
+    {
+      "src": "/index.html",
+      "dest": "/src/public/index.html"
+    },
+    {
+      "src": "/signup.html",
       "dest": "/src/public/signup.html"
     },
     {
-      "src": "/login",
+      "src": "/login.html",
       "dest": "/src/public/login.html"
     },
     {

@@ -394,94 +394,10 @@ async function detectTopic(message) {
 // Store run status in memory (in production, use a database or Redis)
 const runStatusMap = new Map();
 
-// Modify the /message route to be asynchronous
-router.post('/message', async (req, res) => {
-  const { threadId, message, petInfo } = req.body;
-  const startTime = new Date();
-  let sessionId;
-
-  try {
-    // Get user agent and extract device type
-    const userAgent = req.headers['user-agent'];
-    const deviceType = userAgent.includes('Mobile') ? 'mobile' : 'desktop';
-
-    // Create or get session ID from request
-    if (!req.headers['session-id']) {
-      sessionId = await createChatSession(petInfo.userId, deviceType);
-    } else {
-      sessionId = req.headers['session-id'];
-    }
-
-    // Store user message in database
-    const userMessageResult = await pool.query(
-      'INSERT INTO chat_messages (pet_id, thread_id, message, role, session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [petInfo.id, threadId, message, 'user', sessionId]
-    );
-
-    const messageId = userMessageResult.rows[0].id;
-
-    // Detect and store topic
-    const topic = await detectTopic(message);
-    await pool.query(
-      'INSERT INTO chat_topics (message_id, topic) VALUES ($1, $2)',
-      [messageId, topic]
-    );
-
-    // Update last_updated timestamp for the pet
-    await pool.query(
-      'UPDATE pets SET last_updated = CURRENT_TIMESTAMP WHERE id = $1',
-      [petInfo.id]
-    );
-
-    // Verify assistant is initialized
-    if (!assistant) {
-      throw new Error('Assistant not initialized');
-    }
-
-    // Add the message to the thread
-    console.log('Creating message in thread...');
-    const createdMessage = await openai.beta.threads.messages.create(threadId, {
-      role: 'user',
-      content: message,
-    });
-    console.log('Message created:', createdMessage.id);
-
-    // Run the assistant
-    console.log('Starting assistant run...');
-    const run = await openai.beta.threads.runs.create(threadId, {
-      assistant_id: assistant.id,
-      instructions: `Consider this pet's information while responding: ${JSON.stringify(
-        petInfo
-      )}`,
-    });
-    console.log('Run created:', run.id);
-
-    // Store the run information
-    runStatusMap.set(run.id, {
-      status: 'in_progress',
-      threadId,
-      petInfo,
-      messageId,
-      startTime,
-      sessionId,
-      attempts: 0
-    });
-
-    // Start the background processing
-    processRunInBackground(run.id, threadId, petInfo, messageId, sessionId, startTime);
-
-    // Return immediately with the run ID
-    res.json({
-      runId: run.id,
-      status: 'in_progress',
-      message: 'Your request is being processed. Check the status using the /message-status endpoint.'
-    });
-
-  } catch (error) {
-    console.error('Error in message processing:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// No longer needed - would timeout on Vercel's free tier
+// router.post('/message-sync', async (req, res) => {
+//   // Long-running endpoint code removed
+// });
 
 // Add a new endpoint to check message status
 router.get('/message-status/:runId', async (req, res) => {
@@ -698,22 +614,49 @@ async function processRunInBackground(runId, threadId, petInfo, messageId, sessi
     const endTime = new Date();
     const responseTime = endTime - startTime;
 
-    // Store assistant message with metrics
-    await pool.query(
-      'INSERT INTO chat_messages (pet_id, thread_id, message, role, response_time, is_understood, session_id, source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [
-        petInfo.id,
-        threadId,
-        finalResponse,
-        'assistant',
-        `${responseTime} milliseconds`,
-        !uncertaintyIndicators.some(indicator => 
-          response.toLowerCase().includes(indicator.toLowerCase())
-        ),
-        sessionId,
-        source
-      ]
-    );
+    // Store assistant message with metrics - handle sessionId being null
+    try {
+      // Use different queries based on whether session_id is available
+      if (sessionId) {
+        await pool.query(
+          'INSERT INTO chat_messages (pet_id, thread_id, message, role, response_time, is_understood, session_id, source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [
+            petInfo.id,
+            threadId,
+            finalResponse,
+            'assistant',
+            `${responseTime} milliseconds`,
+            !uncertaintyIndicators.some(indicator => 
+              response.toLowerCase().includes(indicator.toLowerCase())
+            ),
+            sessionId,
+            source
+          ]
+        );
+        
+        // Update session message count only if we have a valid session
+        await updateChatSession(sessionId, 2); // Increment by 2 (user + assistant)
+      } else {
+        // Insert without session_id
+        await pool.query(
+          'INSERT INTO chat_messages (pet_id, thread_id, message, role, response_time, is_understood, source) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [
+            petInfo.id,
+            threadId,
+            finalResponse,
+            'assistant',
+            `${responseTime} milliseconds`,
+            !uncertaintyIndicators.some(indicator => 
+              response.toLowerCase().includes(indicator.toLowerCase())
+            ),
+            source
+          ]
+        );
+      }
+    } catch (dbError) {
+      console.error('Error storing assistant message:', dbError);
+      // Even if DB storage fails, we'll still return the response to the user
+    }
 
     // Update the run status map with the completed response
     runStatusMap.set(runId, {
@@ -723,9 +666,6 @@ async function processRunInBackground(runId, threadId, petInfo, messageId, sessi
       source,
       responseTime
     });
-
-    // Update session message count
-    await updateChatSession(sessionId, 2); // Increment by 2 (user + assistant)
 
   } catch (error) {
     console.error('Error in background processing:', error);
@@ -847,6 +787,112 @@ router.post('/end-session', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Error ending session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add back the original async message endpoint
+router.post('/message', async (req, res) => {
+  const { threadId, message, petInfo } = req.body;
+  const startTime = new Date();
+  let sessionId = null;
+
+  try {
+    // Get user agent and extract device type
+    const userAgent = req.headers['user-agent'];
+    const deviceType = userAgent.includes('Mobile') ? 'mobile' : 'desktop';
+
+    // Verify petInfo has a valid userId
+    const userId = petInfo?.userId || null;
+    
+    // Create or get session ID from request with validation
+    if (!req.headers['session-id']) {
+      if (userId) {
+        try {
+          sessionId = await createChatSession(userId, deviceType);
+          console.log(`Created new session ${sessionId} for user ${userId}`);
+        } catch (sessionError) {
+          console.error('Error creating chat session:', sessionError);
+          // Continue without a session ID
+        }
+      } else {
+        console.log('No userId provided, proceeding without session tracking');
+      }
+    } else {
+      sessionId = req.headers['session-id'];
+    }
+
+    // Store user message in database with session check
+    const userMessageResult = await pool.query(
+      sessionId 
+        ? 'INSERT INTO chat_messages (pet_id, thread_id, message, role, session_id) VALUES ($1, $2, $3, $4, $5) RETURNING id'
+        : 'INSERT INTO chat_messages (pet_id, thread_id, message, role) VALUES ($1, $2, $3, $4) RETURNING id',
+      sessionId 
+        ? [petInfo.id, threadId, message, 'user', sessionId]
+        : [petInfo.id, threadId, message, 'user']
+    );
+
+    const messageId = userMessageResult.rows[0].id;
+
+    // Detect and store topic
+    const topic = await detectTopic(message);
+    await pool.query(
+      'INSERT INTO chat_topics (message_id, topic) VALUES ($1, $2)',
+      [messageId, topic]
+    );
+
+    // Update last_updated timestamp for the pet
+    await pool.query(
+      'UPDATE pets SET last_updated = CURRENT_TIMESTAMP WHERE id = $1',
+      [petInfo.id]
+    );
+
+    // Verify assistant is initialized
+    if (!assistant) {
+      throw new Error('Assistant not initialized');
+    }
+
+    // Add the message to the thread
+    console.log('Creating message in thread...');
+    const createdMessage = await openai.beta.threads.messages.create(threadId, {
+      role: 'user',
+      content: message,
+    });
+    console.log('Message created:', createdMessage.id);
+
+    // Run the assistant
+    console.log('Starting assistant run...');
+    const run = await openai.beta.threads.runs.create(threadId, {
+      assistant_id: assistant.id,
+      instructions: `Consider this pet's information while responding: ${JSON.stringify(
+        petInfo
+      )}`,
+    });
+    console.log('Run created:', run.id);
+
+    // Store the run information
+    runStatusMap.set(run.id, {
+      status: 'in_progress',
+      threadId,
+      petInfo,
+      messageId,
+      startTime,
+      sessionId,
+      attempts: 0
+    });
+
+    // Start the background processing
+    processRunInBackground(run.id, threadId, petInfo, messageId, sessionId, startTime);
+
+    // Return immediately with the run ID
+    res.json({
+      runId: run.id,
+      status: 'in_progress',
+      message: 'Your request is being processed. Check the status using the /message-status endpoint.'
+    });
+
+  } catch (error) {
+    console.error('Error in message processing:', error);
     res.status(500).json({ error: error.message });
   }
 });

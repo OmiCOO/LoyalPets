@@ -19,7 +19,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     if (response.ok) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('userId', data.user.id);
-      window.location.href = '/';
+      window.location.href = '/index.html';
     } else {
       alert(data.message);
     }
@@ -51,7 +51,7 @@ document.getElementById('signupForm')?.addEventListener('submit', async (e) => {
     if (response.ok) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('userId', data.user.id);
-      window.location.href = '/';
+      window.location.href = '/index.html';
     } else {
       alert(data.message);
     }
